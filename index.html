@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>记账本</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: #f0f2f5; min-height: 100vh; padding-bottom: 80px; }
+        
+        .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px 16px; text-align: center; }
+        .header h1 { font-size: 22px; font-weight: 600; }
+        .header .date { font-size: 13px; opacity: 0.8; margin-top: 4px; }
+        
+        .summary { display: flex; background: white; margin: -10px 16px 16px; border-radius: 12px; padding: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+        .summary-item { flex: 1; text-align: center; }
+        .summary-item:not(:last-child) { border-right: 1px solid #eee; }
+        .summary-value { font-size: 22px; font-weight: 700; color: #333; }
+        .summary-label { font-size: 11px; color: #999; margin-top: 4px; }
+        
+        .card { background: white; margin: 0 16px 16px; border-radius: 12px; padding: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+        .card-title { font-size: 15px; font-weight: 600; color: #333; margin-bottom: 12px; }
+        
+        .form-group { margin-bottom: 14px; }
+        .form-label { font-size: 13px; color: #666; margin-bottom: 6px; display: block; }
+        .form-input { width: 100%; padding: 12px; border: 1px solid #e8e8e8; border-radius: 8px; font-size: 16px; background: #fafafa; }
+        .form-input:focus { outline: none; border-color: #667eea; background: white; }
+        
+        .categories { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+        .cat-btn { padding: 10px 0; border: 2px solid #e8e8e8; border-radius: 8px; background: white; font-size: 14px; cursor: pointer; transition: all 0.2s; }
+        .cat-btn.active { border-color: #667eea; background: #667eea; color: white; }
+        .cat-btn:active { transform: scale(0.95); }
+        
+        .submit-btn { width: 100%; padding: 14px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; margin-top: 8px; }
+        .submit-btn:active { transform: scale(0.98); opacity: 0.9; }
+        .submit-btn:disabled { background: #ccc; }
+        
+        .records-list { max-height: 300px; overflow-y: auto; }
+        .record-item { display: flex; align-items: center; padding: 12px 0; border-bottom: 1px solid #f5f5f5; }
+        .record-item:last-child { border-bottom: none; }
+        .record-icon { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; margin-right: 12px; }
+        .record-info { flex: 1; }
+        .record-cat { font-size: 14px; color: #333; font-weight: 500; }
+        .record-note { font-size: 12px; color: #999; margin-top: 2px; }
+        .record-amount { font-size: 16px; font-weight: 600; color: #ff4757; }
+        .record-time { font-size: 11px; color: #ccc; margin-top: 2px; text-align: right; }
+        
+        .empty { text-align: center; color: #ccc; padding: 30px; }
+        
+        .loading { text-align: center; padding: 20px; color: #999; }
+        
+        .toast { position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.7); color: white; padding: 12px 24px; border-radius: 20px; font-size: 14px; z-index: 1000; display: none; }
+        
+        .fab { position: fixed; bottom: 24px; right: 24px; width: 56px; height: 56px; border-radius: 50%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; font-size: 28px; box-shadow: 0 4px 16px rgba(102,126,234,0.4); cursor: pointer; display: none; }
+        
+        .config-bar { background: #fff3cd; padding: 12px 16px; font-size: 12px; color: #856404; text-align: center; }
+        .config-bar input { width: 120px; padding: 4px 8px; border: 1px solid #ffc107; border-radius: 4px; font-size: 12px; margin: 0 4px; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>💰 记账本 <span onclick="openSettings()" style="font-size:14px;opacity:0.7;cursor:pointer;">⚙️</span></h1>
+        <div class="date" id="currentDate"></div>
+    </div>
+    
+    <div class="summary">
+        <div class="summary-item">
+            <div class="summary-value" id="todayTotal">0</div>
+            <div class="summary-label">今日</div>
+        </div>
+        <div class="summary-item">
+            <div class="summary-value" id="monthTotal">0</div>
+            <div class="summary-label">本月</div>
+        </div>
+        <div class="summary-item">
+            <div class="summary-value" id="remainBudget">2000</div>
+            <div class="summary-label">剩余</div>
+        </div>
+    </div>
+    
+    <div class="card">
+        <div class="card-title">记一笔</div>
+        <div class="form-group">
+            <label class="form-label">金额</label>
+            <input type="number" class="form-input" id="amount" placeholder="输入金额" step="0.01" inputmode="decimal">
+        </div>
+        <div class="form-group">
+            <label class="form-label">分类</label>
+            <div class="categories">
+                <button class="cat-btn" data-cat="餐饮">🍜 餐饮</button>
+                <button class="cat-btn" data-cat="交通">🚗 交通</button>
+                <button class="cat-btn" data-cat="学习">📚 学习</button>
+                <button class="cat-btn" data-cat="娱乐">🎮 娱乐</button>
+                <button class="cat-btn" data-cat="购物">🛒 购物</button>
+                <button class="cat-btn" data-cat="其他">📦 其他</button>
+            </div>
+        </div>
+        <div class="form-group">
+            <label class="form-label">备注</label>
+            <input type="text" class="form-input" id="note" placeholder="简单记一下（可选）">
+        </div>
+        <button class="submit-btn" id="submitBtn" onclick="addRecord()">保存</button>
+    </div>
+    
+    <div class="card">
+        <div class="card-title">今日记录</div>
+        <div class="records-list" id="recordsList">
+            <div class="loading">加载中...</div>
+        </div>
+    </div>
+    
+    <div class="toast" id="toast"></div>
+    
+    <div id="settingsModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:999;display:none;align-items:center;justify-content:center;">
+        <div style="background:white;border-radius:12px;padding:20px;width:90%;max-width:320px;">
+            <h3 style="margin-bottom:16px;">设置</h3>
+            <div class="form-group">
+                <label class="form-label">GitHub Token</label>
+                <input type="text" class="form-input" id="tokenInput" placeholder="ghp_xxxx">
+                <div style="font-size:11px;color:#999;margin-top:4px;">
+                    <a href="https://github.com/settings/tokens/new?scopes=repo&description=spending" target="_blank">点此生成Token</a>
+                </div>
+            </div>
+            <div style="display:flex;gap:8px;">
+                <button class="submit-btn" style="flex:1;" onclick="saveToken()">保存</button>
+                <button class="submit-btn" style="flex:1;background:#999;" onclick="closeSettings()">取消</button>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // ============ 配置 - 填入你的GitHub信息 ============
+        const CONFIG = {
+            owner: 'qqqqqqiu0804',
+            repo: 'spending-app',
+            path: 'spending.json',
+            token: localStorage.getItem('gh_token') || ''
+        };
+        
+        const BUDGET = 2000;
+        const CAT_ICONS = {
+            '餐饮': '🍜', '交通': '🚗', '学习': '📚',
+            '娱乐': '🎮', '购物': '🛒', '其他': '📦'
+        };
+        const CAT_COLORS = {
+            '餐饮': '#fff3e0', '交通': '#e3f2fd', '学习': '#e8f5e9',
+            '娱乐': '#fce4ec', '购物': '#f3e5f5', '其他': '#f5f5f5'
+        };
+        
+        let allRecords = [];
+        let selectedCat = '';
+        let sha = null;  // 文件的SHA，用于更新
+        
+        // 初始化
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('currentDate').textContent = new Date().toLocaleDateString('zh-CN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+            
+            // 加载配置
+            const saved = localStorage.getItem('spending_config');
+            if (saved) {
+                const s = JSON.parse(saved);
+                CONFIG.owner = s.owner || '';
+                CONFIG.repo = s.repo || '';
+                CONFIG.token = s.token || '';
+            }
+            
+            if (!CONFIG.owner || !CONFIG.repo) {
+                showToast('请先配置GitHub仓库');
+                return;
+            }
+            
+            loadData();
+        });
+        
+        // 选择分类
+        document.querySelectorAll('.cat-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                selectedCat = btn.dataset.cat;
+            });
+        });
+        
+        // 加载数据
+        async function loadData() {
+            try {
+                const url = `https://api.github.com/repos/${CONFIG.owner}/${CONFIG.repo}/contents/${CONFIG.path}`;
+                const headers = { 'Accept': 'application/vnd.github.v3+json' };
+                if (CONFIG.token) headers['Authorization'] = `token ${CONFIG.token}`;
+                
+                const resp = await fetch(url, { headers });
+                
+                if (resp.status === 404) {
+                    // 文件不存在，创建
+                    allRecords = [];
+                    sha = null;
+                    await saveData();
+                } else if (resp.ok) {
+                    const data = await resp.json();
+                    sha = data.sha;
+                    const content = decodeURIComponent(escape(atob(data.content)));
+                    const parsed = JSON.parse(content);
+                    allRecords = parsed.records || [];
+                }
+                
+                updateUI();
+            } catch (e) {
+                console.error(e);
+                showToast('加载失败: ' + e.message);
+            }
+        }
+        
+        // 保存数据
+        async function saveData() {
+            try {
+                const url = `https://api.github.com/repos/${CONFIG.owner}/${CONFIG.repo}/contents/${CONFIG.path}`;
+                const headers = {
+                    'Accept': 'application/vnd.github.v3+json',
+                    'Content-Type': 'application/json'
+                };
+                if (CONFIG.token) headers['Authorization'] = `token ${CONFIG.token}`;
+                
+                const content = JSON.stringify({ records: allRecords }, null, 2);
+                const encoded = btoa(unescape(encodeURIComponent(content)));
+                
+                const body = {
+                    message: `Update spending ${new Date().toISOString()}`,
+                    content: encoded
+                };
+                if (sha) body.sha = sha;
+                
+                const resp = await fetch(url, {
+                    method: 'PUT',
+                    headers,
+                    body: JSON.stringify(body)
+                });
+                
+                if (resp.ok) {
+                    const data = await resp.json();
+                    sha = data.content.sha;
+                    return true;
+                } else {
+                    const err = await resp.json();
+                    showToast('保存失败: ' + (err.message || ''));
+                    return false;
+                }
+            } catch (e) {
+                showToast('网络错误');
+                return false;
+            }
+        }
+        
+        // 添加记录
+        async function addRecord() {
+            const amount = parseFloat(document.getElementById('amount').value);
+            if (!amount || amount <= 0) {
+                showToast('请输入金额');
+                return;
+            }
+            if (!selectedCat) {
+                showToast('请选择分类');
+                return;
+            }
+            
+            const note = document.getElementById('note').value.trim();
+            const record = {
+                date: new Date().toISOString(),
+                amount: amount,
+                category: selectedCat,
+                note: note
+            };
+            
+            document.getElementById('submitBtn').disabled = true;
+            document.getElementById('submitBtn').textContent = '保存中...';
+            
+            allRecords.push(record);
+            const success = await saveData();
+            
+            if (success) {
+                showToast('已记录');
+                document.getElementById('amount').value = '';
+                document.getElementById('note').value = '';
+                document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
+                selectedCat = '';
+                updateUI();
+            } else {
+                allRecords.pop();
+            }
+            
+            document.getElementById('submitBtn').disabled = false;
+            document.getElementById('submitBtn').textContent = '保存';
+        }
+        
+        // 更新界面
+        function updateUI() {
+            const now = new Date();
+            const today = now.toISOString().split('T')[0];
+            const month = today.substring(0, 7);
+            
+            const todayRecords = allRecords.filter(r => r.date.startsWith(today));
+            const monthRecords = allRecords.filter(r => r.date.startsWith(month));
+            
+            const todayTotal = todayRecords.reduce((sum, r) => sum + r.amount, 0);
+            const monthTotal = monthRecords.reduce((sum, r) => sum + r.amount, 0);
+            const remain = BUDGET - monthTotal;
+            
+            document.getElementById('todayTotal').textContent = todayTotal.toFixed(0);
+            document.getElementById('monthTotal').textContent = monthTotal.toFixed(0);
+            document.getElementById('remainBudget').textContent = remain.toFixed(0);
+            
+            // 渲染今日记录
+            const list = document.getElementById('recordsList');
+            if (todayRecords.length === 0) {
+                list.innerHTML = '<div class="empty">今日暂无记录</div>';
+                return;
+            }
+            
+            list.innerHTML = todayRecords.reverse().map(r => {
+                const time = new Date(r.date).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+                const icon = CAT_ICONS[r.category] || '📦';
+                const color = CAT_COLORS[r.category] || '#f5f5f5';
+                return `
+                    <div class="record-item">
+                        <div class="record-icon" style="background:${color}">${icon}</div>
+                        <div class="record-info">
+                            <div class="record-cat">${r.category}</div>
+                            <div class="record-note">${r.note || ''}</div>
+                        </div>
+                        <div>
+                            <div class="record-amount">-${r.amount.toFixed(2)}</div>
+                            <div class="record-time">${time}</div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        // Toast提示
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            toast.textContent = msg;
+            toast.style.display = 'block';
+            setTimeout(() => toast.style.display = 'none', 2000);
+        }
+        
+        function openSettings() {
+            document.getElementById('tokenInput').value = CONFIG.token;
+            document.getElementById('settingsModal').style.display = 'flex';
+        }
+        
+        function closeSettings() {
+            document.getElementById('settingsModal').style.display = 'none';
+        }
+        
+        function saveToken() {
+            const token = document.getElementById('tokenInput').value.trim();
+            CONFIG.token = token;
+            localStorage.setItem('gh_token', token);
+            closeSettings();
+            showToast('Token已保存');
+            loadData();
+        }
+    </script>
+</body>
+</html>
